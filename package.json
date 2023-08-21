@@ -1,10 +1,12 @@
 {
-  "name": "@cloud-cli/",
+  "name": "state-service",
+  "private": true,
   "version": "0.0.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
   "scripts": {
+    "ci": "npm i && npm run build",
     "build": "tsc",
     "test": "jest",
     "tdd": "jest --watchAll"
@@ -20,6 +22,7 @@
   "devDependencies": {
     "@cloud-cli/prettier-config": "^1.0.0",
     "@cloud-cli/jest-config": "^1.0.0",
-    "@cloud-cli/typescript-config": "^1.0.0"
+    "@cloud-cli/typescript-config": "^1.0.0",
+    "@cloud-cli/store": "^2.0.0"
   }
 }
