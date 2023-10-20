@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "http";
 import { createServer } from "http";
 import { randomUUID } from "crypto";
 import { Resource, StoreDriver } from "@cloud-cli/store";
-// import { EventEmitter } from "node:events";
+import { readFileSync } from 'fs';
 
 type Stateful = { id: string; version: number };
 type AddAction = Stateful & { type: "add"; payload: object };
@@ -11,25 +11,57 @@ type Action = AddAction | RemoveAction;
 type State = Stateful & { state: object };
 
 const hub = new Map<string, State>();
+const esm = readFileSync('./state.mjs', 'utf-8');
 
 function onRequest(request: IncomingMessage, response: ServerResponse) {
-  const method = request.method.toUpperCase();
-  const url = new URL(request.url, "http://localhost/");
+  const method = String(request.method).toUpperCase();
+  const url = new URL(request.url, String(request.headers['x-forwarded-for'] || "http://localhost/"));
+  const route = `${method} ${url.pathname}`;
 
-  if (url.pathname === "/events" && method === "POST") {
+  if (route === 'GET /state.mjs') {
+    onServe(request, response, url);
+    return;
+  }
+  if (route === "POST /events") {
     onEvent(request, response);
     return;
   }
 
-  if (url.pathname === "/events" && method === "GET") {
+  if (route === "GET /events") {
     onEventListen(request, response, url);
     return;
   }
 
-  if (url.pathname === "/state" && method === "POST") {
+  if (route === "POST /state") {
     onCreate(request, response);
     return;
   }
+
+  if (route === 'GET /state') {
+    onRead(request, response, url);
+    return;
+  }
+}
+
+function onServe(_request, response: ServerResponse, url: URL) {
+  response.end(esm.replace('__HOSTNAME__', url.hostname));
+}
+
+function onRead(_request, response: ServerResponse, url: URL) {
+  const id = url.searchParams.get('id') || '';
+
+  if (!id) {
+    response.writeHead(400).end('Missing query param: id');
+    return;
+  }
+
+  if (!hub.has(id)) {
+    response.writeHead(404).end();
+    return;
+  }
+
+  const json = JSON.stringify(hub.get(id));
+  response.end(json);
 }
 
 function onCreate(_request: IncomingMessage, response: ServerResponse) {
@@ -65,7 +97,7 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
 
     if (!hub.has(json?.id)) {
       response.writeHead(404).end();
-      return false;
+      return;
     }
 
     if (type === "add") {
@@ -74,6 +106,7 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
       node.version++;
       const text = String(node.version);
       response.writeHead(202, { "Content-Length": text.length }).end(text);
+      return;
     }
 
     if (type === "remove") {
@@ -82,6 +115,7 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
       node.version++;
       const text = String(node.version);
       response.writeHead(202, { "Content-Length": text.length }).end(text);
+      return;
     }
 
     throw new Error("Invalid action type: " + type);
