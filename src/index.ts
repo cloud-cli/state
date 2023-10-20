@@ -42,6 +42,8 @@ function onRequest(request: IncomingMessage, response: ServerResponse) {
     onRead(request, response, url);
     return;
   }
+
+  response.writeHead(404).end('Cannot resolve ' + route);
 }
 
 function onServe(_request, response: ServerResponse, url: URL) {
