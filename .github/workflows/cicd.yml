@@ -1,5 +1,5 @@
 on:
-  push:
+  - push
 
 concurrency:
   group: ${{ github.ref }}
@@ -9,6 +9,6 @@ jobs:
   build:
     uses: cloud-cli/workflows/.github/workflows/docker-ghcr-build.yml@main
     with:
-      name: cloudy-apps/app-notes
+      name: homebots/state
       baseImage: cloud-cli/node:latest
       type: node
