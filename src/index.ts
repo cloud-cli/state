@@ -14,8 +14,9 @@ const esm = readFileSync('./state.mjs', 'utf-8');
 
 function onRequest(request: IncomingMessage, response: ServerResponse) {
   const method = String(request.method).toUpperCase();
-  const url = new URL(request.url, String(request.headers['x-forwarded-for'] || 'http://localhost/'));
+  const url = new URL(request.url, 'http://' + String(request.headers['x-forwarded-for'] || 'localhost/'));
   const route = `${method} ${url.pathname}`;
+  console.log(new Date().toISOString(), route);
 
   if (route === 'GET /state.mjs') {
     onServe(request, response, url);
@@ -154,4 +155,6 @@ function readStream(stream): Promise<string> {
   });
 }
 
-createServer(onRequest).listen(Number(process.env.PORT));
+createServer(onRequest).listen(Number(process.env.PORT), () => {
+  console.log('Started on ' + process.env.PORT);
+});
