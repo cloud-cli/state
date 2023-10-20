@@ -16,6 +16,18 @@ Response:
 }
 ```
 
+**GET /state?id=<state_uid>**
+
+Get the current state
+
+```json
+{
+  "id": "<state uid>",
+  "version": 123,
+  "state": {...}
+}
+```
+
 **POST /events**
 
 Modify state with an event:
@@ -42,8 +54,6 @@ Request to remove values:
 }
 ```
 
-
 **GET /events**
 
 Event source channel for state updates
-
