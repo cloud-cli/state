@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createServer, request } from "node:http";
+import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
