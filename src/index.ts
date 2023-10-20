@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createServer } from "node:http";
+import { createServer, request } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { EventEmitter } from 'node:events';
 
 const dataPath = process.env.DATA_PATH || "./data";
 
@@ -47,6 +48,7 @@ class StoredMap<K, V> extends Map<K, V> {
 
 const hub = new StoredMap<string, State>();
 const esm = readFileSync("./state.mjs", "utf-8");
+const streams = new EventEmitter();
 
 function onRequest(request: IncomingMessage, response: ServerResponse) {
   const method = String(request.method).toUpperCase();
@@ -83,6 +85,11 @@ function onRequest(request: IncomingMessage, response: ServerResponse) {
   }
 
   response.writeHead(404).end("Cannot resolve " + route);
+}
+
+function onUpdate(id, state) {
+  hub.set(id, state);
+  streams.emit('update:' + id, state);
 }
 
 function onServe(_request, response: ServerResponse, url: URL) {
@@ -142,12 +149,13 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
     }
 
     const { type } = json;
+
     if (type === "add") {
       const node = hub.get(json.id);
       node.state[json.key] = json.value;
       node.version++;
       const text = String(node.version);
-      hub.set(json.id, node);
+      onUpdate(json.id, node);
       response.writeHead(202, { "Content-Length": text.length }).end(text);
       return;
     }
@@ -157,7 +165,7 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
       delete node.state[json.key];
       node.version++;
       const text = String(node.version);
-      hub.set(json.id, node);
+      onUpdate(json.id, node);
       response.writeHead(202, { "Content-Length": text.length }).end(text);
       return;
     }
@@ -182,11 +190,32 @@ function assertValidJson(json) {
 }
 
 function onEventListen(
-  _request: IncomingMessage,
+  request: IncomingMessage,
   response: ServerResponse,
   url: URL
 ) {
-  response.writeHead(422).end(url.pathname);
+  const id = url.searchParams.get('id');
+
+  if (!id) {
+    response.writeHead(400).end("Missing query param: id");
+    return;
+  }
+
+  if (!hub.has(id)) {
+    response.writeHead(404).end();
+    return;
+  }
+
+  response.setHeader("Content-Type", "text/event-stream");
+  response.setHeader("Cache-Control", "no-cache");
+
+  const event = 'update:' + id;
+  const handler = state => response.writable && response.write(`data: ${JSON.stringify(state)}\n\n`);
+  const detach = () => streams.off(event, handler);
+
+  streams.on(event, handler);
+  request.on('close', detach);
+  request.on('error', detach);
 }
 
 function readStream(stream): Promise<string> {
