@@ -2,7 +2,7 @@
 
 ## API
 
-**POST /state**
+**POST /states**
 
 Create a state.
 
@@ -16,7 +16,7 @@ Response:
 }
 ```
 
-**GET /state?id=<state_uid>**
+**GET /states?id=<state_uid>**
 
 Get the current state
 
@@ -38,9 +38,8 @@ Request to add values:
 {
   "id": "<state uid>",
   "type": "add",
-  "payload": {
-    "foo": "value"
-  }
+  "key": "foo",
+  "value": 123
 }
 ```
 

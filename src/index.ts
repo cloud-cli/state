@@ -1,60 +1,99 @@
-import type { IncomingMessage, ServerResponse } from 'http';
-import { createServer } from 'http';
-import { randomUUID } from 'crypto';
-import { readFileSync } from 'fs';
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { createServer } from "node:http";
+import { randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
+
+const dataPath = process.env.DATA_PATH || "./data";
+
+const tryParse = (raw: string) => {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
 
 type Stateful = { id: string; version: number };
-type AddAction = Stateful & { type: 'add'; key: string; payload: object };
-type RemoveAction = Stateful & { type: 'remove'; key: string };
+type AddAction = Stateful & { type: "add"; key: string; value: object };
+type RemoveAction = Stateful & { type: "remove"; key: string };
 type Action = AddAction | RemoveAction;
 type State = Stateful & { state: object };
 
-const hub = new Map<string, State>();
-const esm = readFileSync('./state.mjs', 'utf-8');
+class StoredMap<K, V> extends Map<K, V> {
+  constructor(...args) {
+    super(...args);
+    const stateFiles = readdirSync(dataPath);
+
+    for (const next of stateFiles) {
+      const filePath = join(dataPath, next);
+      const raw = readFileSync(filePath, "utf-8");
+      const json = tryParse(raw);
+
+      if (json) {
+        super.set(next as K, json as V);
+      } else {
+        unlinkSync(filePath);
+      }
+    }
+  }
+
+  set(key: K, value: V) {
+    const r = super.set(key, value);
+    writeFileSync(join(dataPath, String(key)), JSON.stringify(value));
+    return r;
+  }
+}
+
+const hub = new StoredMap<string, State>();
+const esm = readFileSync("./state.mjs", "utf-8");
 
 function onRequest(request: IncomingMessage, response: ServerResponse) {
   const method = String(request.method).toUpperCase();
-  const url = new URL(request.url, 'http://' + String(request.headers['x-forwarded-for'] || 'localhost/'));
+  const url = new URL(
+    request.url,
+    "http://" + String(request.headers["x-forwarded-for"] || "localhost")
+  );
   const route = `${method} ${url.pathname}`;
   console.log(new Date().toISOString(), route);
 
-  if (route === 'GET /state.mjs') {
+  if (route === "GET /state.mjs") {
     onServe(request, response, url);
     return;
   }
 
-  if (route === 'POST /events') {
+  if (route === "POST /events") {
     onEvent(request, response);
     return;
   }
 
-  if (route === 'GET /events') {
+  if (route === "GET /events") {
     onEventListen(request, response, url);
     return;
   }
 
-  if (route === 'POST /state') {
+  if (route === "POST /states") {
     onCreate(request, response);
     return;
   }
 
-  if (route === 'GET /state') {
+  if (route === "GET /states") {
     onRead(request, response, url);
     return;
   }
 
-  response.writeHead(404).end('Cannot resolve ' + route);
+  response.writeHead(404).end("Cannot resolve " + route);
 }
 
 function onServe(_request, response: ServerResponse, url: URL) {
-  response.end(esm.replace('__HOSTNAME__', url.hostname));
+  response.end(esm.replace("__HOSTNAME__", url.hostname));
 }
 
 function onRead(_request, response: ServerResponse, url: URL) {
-  const id = url.searchParams.get('id') || '';
+  const id = url.searchParams.get("id") || "";
 
   if (!id) {
-    response.writeHead(400).end('Missing query param: id');
+    response.writeHead(400).end("Missing query param: id");
     return;
   }
 
@@ -75,8 +114,8 @@ function onCreate(_request: IncomingMessage, response: ServerResponse) {
 
   response
     .writeHead(201, {
-      'Content-Type': 'application/json',
-      'Content-Length': text.length,
+      "Content-Type": "application/json",
+      "Content-Length": text.length,
     })
     .end(text);
 }
@@ -86,7 +125,7 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
     const body = await readStream(request);
     const json = JSON.parse(body) as Action;
 
-    if (assertValidJson(json)) {
+    if (!assertValidJson(json)) {
       response.writeHead(400).end();
       return;
     }
@@ -103,25 +142,27 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
       return;
     }
 
-    if (type === 'add') {
+    if (type === "add") {
       const node = hub.get(json.id);
-      node.state[json.key] = json.payload;
+      node.state[json.key] = json.value;
       node.version++;
       const text = String(node.version);
-      response.writeHead(202, { 'Content-Length': text.length }).end(text);
+      hub.set(json.id, node);
+      response.writeHead(202, { "Content-Length": text.length }).end(text);
       return;
     }
 
-    if (type === 'remove') {
+    if (type === "remove") {
       const node = hub.get(json.id);
       delete node.state[json.key];
       node.version++;
       const text = String(node.version);
-      response.writeHead(202, { 'Content-Length': text.length }).end(text);
+      hub.set(json.id, node);
+      response.writeHead(202, { "Content-Length": text.length }).end(text);
       return;
     }
 
-    throw new Error('Invalid action type: ' + type);
+    throw new Error("Invalid action type: " + type);
   } catch (error) {
     console.log(error);
     response.writeHead(500).end();
@@ -141,22 +182,26 @@ function verifyVersion(json: Action) {
 }
 
 function assertValidJson(json) {
-  return json && typeof json === 'object' && json.type && json.version;
+  return json && typeof json === "object" && json.type && json.version;
 }
 
-function onEventListen(_request: IncomingMessage, response: ServerResponse, url: URL) {
+function onEventListen(
+  _request: IncomingMessage,
+  response: ServerResponse,
+  url: URL
+) {
   response.writeHead(422).end(url.pathname);
 }
 
 function readStream(stream): Promise<string> {
   return new Promise((resolve, reject) => {
     const all = [];
-    stream.on('data', (c) => all.push(c));
-    stream.on('end', () => resolve(Buffer.concat(all).toString('utf-8')));
-    stream.on('error', (e) => reject(String(e)));
+    stream.on("data", (c) => all.push(c));
+    stream.on("end", () => resolve(Buffer.concat(all).toString("utf-8")));
+    stream.on("error", (e) => reject(String(e)));
   });
 }
 
 createServer(onRequest).listen(Number(process.env.PORT), () => {
-  console.log('Started on ' + process.env.PORT);
+  console.log("Started on " + process.env.PORT);
 });
