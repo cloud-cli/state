@@ -87,11 +87,6 @@ function onRequest(request: IncomingMessage, response: ServerResponse) {
   response.writeHead(404).end("Cannot resolve " + route);
 }
 
-function onUpdate(id, state) {
-  hub.set(id, state);
-  streams.emit('update:' + id, state);
-}
-
 function onServe(_request, response: ServerResponse, url: URL) {
   response.end(esm.replace("__HOSTNAME__", url.hostname));
 }
@@ -127,45 +122,51 @@ function onCreate(_request: IncomingMessage, response: ServerResponse) {
     .end(text);
 }
 
+function onUpdate(id, state) {
+  state.version++;
+  hub.set(id, state);
+  streams.emit('update:' + id, state);
+}
+
 async function onEvent(request: IncomingMessage, response: ServerResponse) {
   try {
     const body = await readStream(request);
-    const json = tryParse(body) as Action;
+    const action = tryParse(body) as Action;
 
-    if (!assertValidJson(json)) {
+    if (!assertValidJson(action)) {
       response.writeHead(400).end();
       return;
     }
 
 
-    if (!hub.has(json?.id)) {
+    if (!hub.has(action?.id)) {
       response.writeHead(404).end();
       return;
     }
 
-    if (!verifyVersion(json)) {
-      response.writeHead(409).end('Invalid version: ' + json.version);
+    if (!verifyVersion(action)) {
+      response.writeHead(409).end('Invalid version: ' + action.version);
       return;
     }
 
-    const { type } = json;
+    const { type } = action;
 
     if (type === "add") {
-      const node = hub.get(json.id);
-      node.state[json.key] = json.value;
-      node.version++;
+      const node = hub.get(action.id);
+      node.state[action.key] = action.value;
+      onUpdate(action.id, node);
+
       const text = String(node.version);
-      onUpdate(json.id, node);
       response.writeHead(202, { "Content-Length": text.length }).end(text);
       return;
     }
 
     if (type === "remove") {
-      const node = hub.get(json.id);
-      delete node.state[json.key];
-      node.version++;
+      const node = hub.get(action.id);
+      delete node.state[action.key];
+      onUpdate(action.id, node);
+
       const text = String(node.version);
-      onUpdate(json.id, node);
       response.writeHead(202, { "Content-Length": text.length }).end(text);
       return;
     }
