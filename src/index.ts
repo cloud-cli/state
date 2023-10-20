@@ -123,25 +123,25 @@ function onCreate(_request: IncomingMessage, response: ServerResponse) {
 async function onEvent(request: IncomingMessage, response: ServerResponse) {
   try {
     const body = await readStream(request);
-    const json = JSON.parse(body) as Action;
+    const json = tryParse(body) as Action;
 
     if (!assertValidJson(json)) {
       response.writeHead(400).end();
       return;
     }
 
-    const { type } = json;
-
-    if (!verifyVersion(json)) {
-      response.writeHead(409).end();
-      return;
-    }
 
     if (!hub.has(json?.id)) {
       response.writeHead(404).end();
       return;
     }
 
+    if (!verifyVersion(json)) {
+      response.writeHead(409).end('Invalid version: ' + json.version);
+      return;
+    }
+
+    const { type } = json;
     if (type === "add") {
       const node = hub.get(json.id);
       node.state[json.key] = json.value;
@@ -172,13 +172,9 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
 function verifyVersion(json: Action) {
   const node = hub.get(json.id);
   const version = Number(json.version);
-  const localVersion = node.version;
+  const localVersion = Number(node.version);
 
-  if (localVersion < version) {
-    return false;
-  }
-
-  return true;
+  return localVersion === version;
 }
 
 function assertValidJson(json) {
