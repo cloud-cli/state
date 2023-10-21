@@ -1,4 +1,4 @@
-const hostname = "https://__HOSTNAME__";
+const hostname = 'https://__HOSTNAME__';
 
 /**
  * @example
@@ -9,10 +9,12 @@ const hostname = "https://__HOSTNAME__";
  *    state.remove('key')
  */
 
-export class State {
+export class State extends EventTarget {
   constructor(id) {
+    super();
     this.id = id;
     this.state = null;
+    this._onchange = null;
   }
 
   async init() {
@@ -27,14 +29,31 @@ export class State {
     this.connect();
   }
 
+  get onchange() {
+    return this._onchange;
+  }
+
+  set onchange(v) {
+    return this._onchange = v;
+  }
+
   connect() {
     const source = new EventSource(`${hostname}/events`);
     source.onerror = () => setTimeout(() => this.connect(), 1000);
-    source.onmessage = (message) => (this.state = message.data);
+    source.onmessage = (message) => {
+      this.state = message.data;
+      this.emitState();
+    };
+  }
+
+  emitState() {
+    const e = new CustomEvent('change', { detail: this.state });
+    this.dispatchEvent(e);
+    this._onchange && this._onchange(e);
   }
 
   async create() {
-    const state = await fetch(`${hostname}/states`, { method: "POST", mode: 'cors' });
+    const state = await fetch(`${hostname}/states`, { method: 'POST', mode: 'cors' });
 
     if (state.ok) {
       this.state = await state.json();
@@ -48,12 +67,12 @@ export class State {
   }
 
   async add(key, value) {
-    const action = { type: "add", key, value };
+    const action = { type: 'add', key, value };
     await this.dispatch(action);
   }
 
   async remove(key) {
-    const action = { type: "remove", key };
+    const action = { type: 'remove', key };
     await this.dispatch(action);
   }
 
@@ -65,11 +84,11 @@ export class State {
     };
 
     const body = JSON.stringify(action);
-    const headers = { "content-type": "application/json" };
+    const headers = { 'content-type': 'application/json' };
     const request = await fetch(`${hostname}/events`, {
       mode: 'cors',
       headers,
-      method: "POST",
+      method: 'POST',
       body,
     });
 
@@ -91,13 +110,17 @@ export class State {
     }
 
     switch (action.type) {
-      case "add":
+      case 'add':
         this.state[action.key] = action.value;
         break;
-      case "add":
+      case 'remove':
         delete this.state[action.key];
         break;
+      default:
+        return;
     }
+
+    this.emitState();
   }
 }
 
