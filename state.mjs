@@ -39,7 +39,7 @@ export class State extends EventTarget {
   }
 
   connect() {
-    const source = new EventSource(`${hostname}/events`);
+    const source = new EventSource(`${hostname}/events?id=${this.id}`);
     source.onerror = () => setTimeout(() => this.connect(), 1000);
     source.onmessage = (message) => {
       this.state = message.data;
