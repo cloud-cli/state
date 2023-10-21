@@ -7,7 +7,8 @@ const hostname = 'https://__HOSTNAME__';
  *    localStorage.stateId = state.id;
  *    state.addEventListener('change', console.log);
  *    await state.add('key', value);
- *    await state.remove('key')
+ *    await state.remove('key');
+ *    console.log(state.current);
  */
 
 export class State extends EventTarget {
@@ -38,6 +39,10 @@ export class State extends EventTarget {
     return this._onchange = v;
   }
 
+  get current() {
+    return this.state?.state;
+  }
+
   connect() {
     const source = new EventSource(`${hostname}/events?id=${this.id}`);
     source.onerror = () => setTimeout(() => this.connect(), 1000);
@@ -48,7 +53,7 @@ export class State extends EventTarget {
   }
 
   emitState() {
-    const e = new CustomEvent('change', { detail: this.state.state });
+    const e = new CustomEvent('change', { detail: this.current });
     this.dispatchEvent(e);
     this._onchange && this._onchange(e);
   }
