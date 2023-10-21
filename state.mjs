@@ -47,7 +47,7 @@ export class State extends EventTarget {
     const source = new EventSource(`${hostname}/events?id=${this.id}`);
     source.onerror = () => setTimeout(() => this.connect(), 1000);
     source.onmessage = (message) => {
-      this.state = message.data;
+      this.state = JSON.parse(message.data);
       this.emitState();
     };
   }
