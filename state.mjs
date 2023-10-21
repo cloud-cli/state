@@ -5,8 +5,9 @@ const hostname = 'https://__HOSTNAME__';
  *    const state = new State(localStorage.stateId);
  *    await state.init();
  *    localStorage.stateId = state.id;
- *    state.add('key', value);
- *    state.remove('key')
+ *    state.addEventListener('change', console.log);
+ *    await state.add('key', value);
+ *    await state.remove('key')
  */
 
 export class State extends EventTarget {
@@ -47,7 +48,7 @@ export class State extends EventTarget {
   }
 
   emitState() {
-    const e = new CustomEvent('change', { detail: this.state });
+    const e = new CustomEvent('change', { detail: this.state.state });
     this.dispatchEvent(e);
     this._onchange && this._onchange(e);
   }
