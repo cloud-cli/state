@@ -1,11 +1,11 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
-import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 
-const dataPath = process.env.DATA_PATH || "./data";
+const dataPath = process.env.DATA_PATH || './data';
 
 const tryParse = (raw: string) => {
   try {
@@ -16,8 +16,8 @@ const tryParse = (raw: string) => {
 };
 
 type Stateful = { id: string; version: number };
-type AddAction = Stateful & { type: "add"; key: string; value: object };
-type RemoveAction = Stateful & { type: "remove"; key: string };
+type AddAction = Stateful & { type: 'add'; key: string; value: object };
+type RemoveAction = Stateful & { type: 'remove'; key: string };
 type Action = AddAction | RemoveAction;
 type State = Stateful & { state: object };
 
@@ -28,7 +28,7 @@ class StoredMap<K, V> extends Map<K, V> {
 
     for (const next of stateFiles) {
       const filePath = join(dataPath, next);
-      const raw = readFileSync(filePath, "utf-8");
+      const raw = readFileSync(filePath, 'utf-8');
       const json = tryParse(raw);
 
       if (json) {
@@ -47,62 +47,59 @@ class StoredMap<K, V> extends Map<K, V> {
 }
 
 const hub = new StoredMap<string, State>();
-const esm = readFileSync("./state.mjs", "utf-8");
+const esm = readFileSync('./state.mjs', 'utf-8');
 const streams = new EventEmitter();
 
 function onRequest(request: IncomingMessage, response: ServerResponse) {
   const method = String(request.method).toUpperCase();
-  const url = new URL(
-    request.url,
-    "http://" + String(request.headers["x-forwarded-for"] || "localhost")
-  );
+  const url = new URL(request.url, 'http://' + String(request.headers['x-forwarded-for'] || 'localhost'));
   const route = `${method} ${url.pathname}`;
   console.log(new Date().toISOString(), route);
 
-  if (route === "GET /state.mjs") {
+  if (route === 'GET /state.mjs') {
     onServe(request, response, url);
     return;
   }
 
-  if (route === "POST /events") {
+  if (route === 'POST /events') {
     onEvent(request, response);
     return;
   }
 
-  if (route === "GET /events") {
+  if (route === 'GET /events') {
     onEventListen(request, response, url);
     return;
   }
 
-  if (route === "POST /states") {
+  if (route === 'POST /states') {
     onCreate(request, response);
     return;
   }
 
-  if (route === "GET /states") {
+  if (route === 'GET /states') {
     onRead(request, response, url);
     return;
   }
 
-  response.writeHead(404).end("Cannot resolve " + route);
+  response.writeHead(404).end('Cannot resolve ' + route);
 }
 
 function onServe(_request, response: ServerResponse, url: URL) {
-  const body = esm.replace("__HOSTNAME__", url.hostname);
+  const body = esm.replace('__HOSTNAME__', url.hostname);
   response.writeHead(200, {
     'content-type': 'text/javascript',
     'content-length': body.length,
-    'cache-control': 'max-age=604800'
+    'cache-control': 'max-age=604800',
   });
 
   response.end(body);
 }
 
 function onRead(_request, response: ServerResponse, url: URL) {
-  const id = url.searchParams.get("id") || "";
+  const id = url.searchParams.get('id') || '';
 
   if (!id) {
-    response.writeHead(400).end("Missing query param: id");
+    response.writeHead(400).end('Missing query param: id');
     return;
   }
 
@@ -123,8 +120,8 @@ function onCreate(_request: IncomingMessage, response: ServerResponse) {
 
   response
     .writeHead(201, {
-      "Content-Type": "application/json",
-      "Content-Length": text.length,
+      'Content-Type': 'application/json',
+      'Content-Length': text.length,
     })
     .end(text);
 }
@@ -145,7 +142,6 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
       return;
     }
 
-
     if (!hub.has(action?.id)) {
       response.writeHead(404).end();
       return;
@@ -158,27 +154,27 @@ async function onEvent(request: IncomingMessage, response: ServerResponse) {
 
     const { type } = action;
 
-    if (type === "add") {
+    if (type === 'add') {
       const node = hub.get(action.id);
       node.state[action.key] = action.value;
       onUpdate(action.id, node);
 
       const text = String(node.version);
-      response.writeHead(202, { "Content-Length": text.length }).end(text);
+      response.writeHead(202, { 'Content-Length': text.length }).end(text);
       return;
     }
 
-    if (type === "remove") {
+    if (type === 'remove') {
       const node = hub.get(action.id);
       delete node.state[action.key];
       onUpdate(action.id, node);
 
       const text = String(node.version);
-      response.writeHead(202, { "Content-Length": text.length }).end(text);
+      response.writeHead(202, { 'Content-Length': text.length }).end(text);
       return;
     }
 
-    throw new Error("Invalid action type: " + type);
+    throw new Error('Invalid action type: ' + type);
   } catch (error) {
     console.log(error);
     response.writeHead(500).end();
@@ -194,18 +190,14 @@ function verifyVersion(json: Action) {
 }
 
 function assertValidJson(json) {
-  return json && typeof json === "object" && json.type && json.version;
+  return json && typeof json === 'object' && json.type && json.version;
 }
 
-function onEventListen(
-  request: IncomingMessage,
-  response: ServerResponse,
-  url: URL
-) {
+function onEventListen(request: IncomingMessage, response: ServerResponse, url: URL) {
   const id = url.searchParams.get('id');
 
   if (!id) {
-    response.writeHead(400).end("Missing query param: id");
+    response.writeHead(400).end('Missing query param: id');
     return;
   }
 
@@ -214,11 +206,11 @@ function onEventListen(
     return;
   }
 
-  response.setHeader("Content-Type", "text/event-stream");
-  response.setHeader("Cache-Control", "no-cache");
+  response.setHeader('Content-Type', 'text/event-stream');
+  response.setHeader('Cache-Control', 'no-cache');
 
   const event = 'update:' + id;
-  const handler = state => response.writable && response.write(`data: ${JSON.stringify(state)}\n\n`);
+  const handler = (state) => response.writable && response.write(`data: ${JSON.stringify(state)}\n\n`);
   const detach = () => streams.off(event, handler);
 
   streams.on(event, handler);
@@ -229,12 +221,12 @@ function onEventListen(
 function readStream(stream): Promise<string> {
   return new Promise((resolve, reject) => {
     const all = [];
-    stream.on("data", (c) => all.push(c));
-    stream.on("end", () => resolve(Buffer.concat(all).toString("utf-8")));
-    stream.on("error", (e) => reject(String(e)));
+    stream.on('data', (c) => all.push(c));
+    stream.on('end', () => resolve(Buffer.concat(all).toString('utf-8')));
+    stream.on('error', (e) => reject(String(e)));
   });
 }
 
 createServer(onRequest).listen(Number(process.env.PORT), () => {
-  console.log("Started on " + process.env.PORT);
+  console.log('Started on ' + process.env.PORT);
 });
