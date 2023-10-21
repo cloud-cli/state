@@ -40,9 +40,9 @@ class StoredMap<K, V> extends Map<K, V> {
   }
 
   set(key: K, value: V) {
-    const r = super.set(key, value);
+    super.set(key, value);
     writeFileSync(join(dataPath, String(key)), JSON.stringify(value));
-    return r;
+    return this;
   }
 }
 
@@ -88,7 +88,14 @@ function onRequest(request: IncomingMessage, response: ServerResponse) {
 }
 
 function onServe(_request, response: ServerResponse, url: URL) {
-  response.end(esm.replace("__HOSTNAME__", url.hostname));
+  const body = esm.replace("__HOSTNAME__", url.hostname);
+  response.writeHead(200, {
+    'content-type': 'text/javascript',
+    'content-length': body.length,
+    'cache-control': 'max-age=604800'
+  });
+
+  response.end(body);
 }
 
 function onRead(_request, response: ServerResponse, url: URL) {
