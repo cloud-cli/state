@@ -56,7 +56,7 @@ function onRequest(request: IncomingMessage, response: ServerResponse) {
   const route = `${method} ${url.pathname}`;
   console.log(new Date().toISOString(), route);
 
-  if (route === 'GET /state.mjs') {
+  if (route === 'GET /state.mjs' || route === 'GET /index.mjs') {
     onServe(request, response, url);
     return;
   }
